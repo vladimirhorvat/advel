@@ -81,8 +81,6 @@ cd project-dir
 composer install
 mysql -uroot -e "create database advel"
 mysql -uroot advel < project-dir/db.sql
-mkdir -p project-dir/web/sites/default/files
-chmod 777 project-dir/web/sites/default/files
 ```
 
 edit web/sites/default/settings.local.php and change lines 4,5,6,14.\
