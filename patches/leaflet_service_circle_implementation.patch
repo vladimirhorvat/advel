@@ -1,0 +1,35 @@
+diff --git a/web/modules/contrib/leaflet/src/LeafletService.php b/web/modules/contrib/leaflet/src/LeafletService.php
+index 0310040..582bf43 100644
+--- a/web/modules/contrib/leaflet/src/LeafletService.php
++++ b/web/modules/contrib/leaflet/src/LeafletService.php
+@@ -254,6 +254,30 @@ private function leafletProcessGeometry(\Geometry $geom) {
+         }
+         break;
+ 
++      case 'circle':
++        $components = $geom->getComponents();
++        $datum['points'][] = array(
++          'lat' => $components[0][0],
++          'lon' => $components[0][1],
++        );
++        $datum['radius'] = $components[1];
++        break;
++
++      case 'multicircle':
++        $components = $geom->getComponents();
++        foreach ($components as $component) {
++          $datum['component'][] = array(
++            'points' => array (
++              'lat' => $component->components[0][0],
++              'lon' => $component->components[0][1],
++            ),
++            'radius' => $component->components[1],
++            'type' => 'circle',
++          );
++        }
++        break;
++          
++
+       case 'multipolyline':
+       case 'multilinestring':
+         if ($datum['type'] == 'multilinestring') {

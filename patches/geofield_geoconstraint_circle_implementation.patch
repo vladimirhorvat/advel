@@ -1,0 +1,16 @@
+diff --git a/web/modules/contrib/geofield/src/Plugin/Validation/Constraint/GeoConstraintValidator.php b/web/modules/contrib/geofield/src/Plugin/Validation/Constraint/GeoConstraintValidator.php
+index 25e8c84..b49bc10 100644
+--- a/web/modules/contrib/geofield/src/Plugin/Validation/Constraint/GeoConstraintValidator.php
++++ b/web/modules/contrib/geofield/src/Plugin/Validation/Constraint/GeoConstraintValidator.php
+@@ -47,7 +47,10 @@ public function validate($value, Constraint $constraint) {
+       $valid_geometry = TRUE;
+ 
+       try {
+-        if (!$this->geoPhpWrapper->load($value)) {
++        if ((strpos($value, 'CIRCLE') !== false && strpos($value, 'GEOMETRYCOLLECTION') === false) || (strpos($value, 'MULTICIRCLE') !== false && strpos($value, 'GEOMETRYCOLLECTION') === false)) {
++          $valid_geometry = TRUE;
++        } 
++        else if (!$this->geoPhpWrapper->load($value)) {
+           $valid_geometry = FALSE;
+         }
+       }

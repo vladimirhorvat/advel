@@ -1,0 +1,82 @@
+diff --git a/web/modules/contrib/leaflet/leaflet.drupal.js b/web/modules/contrib/leaflet/leaflet.drupal.js
+index 0753299..8eead17 100644
+--- a/web/modules/contrib/leaflet/leaflet.drupal.js
++++ b/web/modules/contrib/leaflet/leaflet.drupal.js
+@@ -44,7 +44,6 @@
+           })
+         });
+       });
+-
+       $.each(settings.leaflet, function(m, data) {
+         $('#' + data.mapid, context).each(function() {
+           var $container = $(this);
+@@ -61,7 +60,6 @@
+ 
+             // Define the Drupal.Leaflet.path object.
+             Drupal.Leaflet[mapid].path = data.map.settings.path && data.map.settings.path.length > 0 ? JSON.parse(data.map.settings.path) : {};
+-
+             // Add Leaflet Map Features.
+             $container.data('leaflet').add_features(mapid, data.features, true);
+           }
+@@ -294,6 +292,14 @@
+         lFeature = self.create_multipolygon(feature);
+         break;
+ 
++      case 'circle':
++        lFeature = self.create_circle(feature);
++        break
++
++      case 'multicircle':
++        lFeature = self.create_multicircle(feature);
++        break
++
+       case 'multipolyline':
+         lFeature = self.create_multipoly(feature);
+         break;
+@@ -475,6 +481,38 @@
+     return new L.Polygon(latlngs);
+   };
+ 
++  Drupal.Leaflet.prototype.create_circle = function(circle) {
++    var self = this;
++    var latlngs = [];
++    var options = [];
++    var points_num = circle.points.length;
++    if (typeof points_num !== 'undefined') {
++      for (var i = 0; i < points_num; i++) {
++        var latlng = new L.LatLng(circle.points[i].lat, circle.points[i].lon);
++        latlngs.push(latlng);
++        self.bounds.push(latlng);
++      }
++    }
++    else {
++      for (var i = 0; i < Object.keys(circle.points).length; i++) {
++        var latlng = new L.LatLng(circle.points.lat, circle.points.lon);
++        latlngs.push(latlng);
++        self.bounds.push(latlng);
++      }
++    }
++    options.radius = circle.radius;
++    return new L.Circle(latlngs, options);
++  };
++
++  Drupal.Leaflet.prototype.create_multicircle = function(multicircle) {
++    var self = this;
++    var layers = new L.featureGroup();
++    for (var x = 0; x < multicircle.component.length; x++) {
++      layers.addLayer(self.create_feature(multicircle.component[x]));
++    }
++    return layers;
++  };
++
+   Drupal.Leaflet.prototype.create_multipolygon = function(multipolygon) {
+     var self = this;
+     var polygons = [];
+@@ -514,7 +552,6 @@
+ 
+   Drupal.Leaflet.prototype.create_json = function(json) {
+     var lJSON = new L.GeoJSON();
+-
+     lJSON.options.onEachFeature = function(feature, layer) {
+       for (var layer_id in layer._layers) {
+         for (var i in layer._layers[layer_id]._latlngs) {

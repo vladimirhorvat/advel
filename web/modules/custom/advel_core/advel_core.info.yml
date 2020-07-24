@@ -1,0 +1,6 @@
+name: advel_core
+description: Custom module for Advel
+package: Custom
+
+type: module
+core: 8.x

@@ -1,0 +1,25 @@
+diff --git a/web/modules/contrib/geofield/geofield.module b/web/modules/contrib/geofield/geofield.module
+index 2246242..a8d2467 100644
+--- a/web/modules/contrib/geofield/geofield.module
++++ b/web/modules/contrib/geofield/geofield.module
+@@ -49,6 +49,20 @@
+  */
+ define('GEOFIELD_TYPE_MULTIPOLYGON', 'MULTIPOLYGON');
+ 
++/**
++ * Circle feature constant.
++ *
++ * @var string
++ */
++define('GEOFIELD_TYPE_CIRCLE', 'CIRCLE');
++
++/**
++ * Multicircle feature constant.
++ *
++ * @var string
++ */
++define('GEOFIELD_TYPE_MULTICIRCLE', 'MULTICIRCLE');
++
+ /* *
+  * Max length of geohashes (imposed by database column length).
+  */

@@ -1,0 +1,5 @@
+# Schema for the theme setting configuration file of the advel_theme theme.
+
+advel_theme.settings:
+  type: theme_settings
+  label: 'advel_theme settings'

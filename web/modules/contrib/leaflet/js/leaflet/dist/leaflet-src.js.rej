@@ -1,0 +1,62 @@
+--- web/modules/contrib/leaflet/js/leaflet/dist/leaflet-src.js
++++ web/modules/contrib/leaflet/js/leaflet/dist/leaflet-src.js
+@@ -8669,11 +8662,13 @@ var GeoJSON = FeatureGroup.extend({
+ 		var options = this.options;
+ 
+ 		if (options.filter && !options.filter(geojson)) { return this; }
++
+ 		var layer = geometryToLayer(geojson, options);
+ 		if (!layer) {
+ 			return this;
+ 		}
+ 		layer.feature = asFeature(geojson);
++
+ 		layer.defaultOptions = layer.options;
+ 		this.resetStyle(layer);
+ 
+@@ -8720,12 +8715,12 @@ var GeoJSON = FeatureGroup.extend({
+ // functions if provided as options.
+ function geometryToLayer(geojson, options) {
+ 
+-	var geometry = geojson.type === 'Feature' ? geojson.geometry : geojson;
+-	var coords = geometry ? geometry.coordinates : null;
+-	var layers = [];
+-	var pointToLayer = options && options.pointToLayer;
+-	var _coordsToLatLng = options && options.coordsToLatLng || coordsToLatLng;
+-	var latlng, latlngs, i, len;
++	var geometry = geojson.type === 'Feature' ? geojson.geometry : geojson,
++	    coords = geometry ? geometry.coordinates : null,
++	    layers = [],
++	    pointToLayer = options && options.pointToLayer,
++	    _coordsToLatLng = options && options.coordsToLatLng || coordsToLatLng,
++	    latlng, latlngs, i, len;
+ 
+ 	if (!coords && !geometry) {
+ 		return null;
+@@ -8849,16 +8812,7 @@ var PointToGeoJSON = {
+ 	toGeoJSON: function (precision) {
+ 		return getFeature(this, {
+ 			type: 'Point',
+-			coordinates: latLngToCoords(this.getLatLng(), precision),
+-		});
+-	}
+-};
+-
+-var CircleToGeoJSON = {
+-	toGeoJSON: function (precision) {
+-		return getFeature(this, {
+-			type: 'Circle',
+-			coordinates: latLngToCoordsCircle(this.getLatLng(), precision),
++			coordinates: latLngToCoords(this.getLatLng(), precision)
+ 		});
+ 	}
+ };
+@@ -8871,7 +8825,7 @@ Marker.include(PointToGeoJSON);
+ // @namespace CircleMarker
+ // @method toGeoJSON(): Object
+ // Returns a [`GeoJSON`](http://en.wikipedia.org/wiki/GeoJSON) representation of the circle marker (as a GeoJSON `Point` Feature).
+-Circle.include(CircleToGeoJSON);
++Circle.include(PointToGeoJSON);
+ CircleMarker.include(PointToGeoJSON);
+ 
+ 

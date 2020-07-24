@@ -1,0 +1,91 @@
+diff --git a/vendor/phayes/geophp/lib/adapters/WKT.class.php b/vendor/phayes/geophp/lib/adapters/WKT.class.php
+index c364644..950533b 100644
+--- a/vendor/phayes/geophp/lib/adapters/WKT.class.php
++++ b/vendor/phayes/geophp/lib/adapters/WKT.class.php
+@@ -68,9 +68,52 @@ private function parsePoint($data_string) {
+     if ($data_string == 'EMPTY') return new Point();
+ 
+     $parts = explode(' ',$data_string);
++    foreach ($parts as &$part) {
++      $part = floatval($part);
++    }
+     return new Point($parts[0], $parts[1]);
+   }
+ 
++  private function parseCircle($data_string) {
++    $data_string = $this->trimParens($data_string);
++
++    // If it's marked as empty, then return an empty circle
++    if ($data_string == 'EMPTY') return new Circle();
++
++    $parts = explode('),',$data_string);
++    foreach ($parts as &$part) {
++      $part = str_replace('(', '', $part);
++    }
++    $parts[0] = explode(' ', $parts[0]);
++    foreach ($parts[0] as &$part) {
++        $part = floatval($part);
++    }
++    $parts[1] = floatval($parts[1]);
++    return new Circle([$parts[0], $parts[1]]);
++}
++
++private function parseMultiCircle($data_string) {
++  $data_string = $this->trimParens($data_string);
++
++  // If it's marked as empty, then return an empty circle
++  if ($data_string == 'EMPTY') return new Circle();
++  $parts = explode('),((',$data_string); 
++  foreach ($parts as &$part) {
++    $part = explode('),', $part);
++    $part = str_replace('(', '', $part);
++    $part = str_replace(')', '', $part);
++    $part[0] = explode(' ', $part[0]);
++  }
++  foreach ($parts as &$part) {
++    foreach ($part[0] as &$point) {
++      $point = floatval($point);
++    }
++    $part[1] = floatval($part[1]);
++    $circles[] = new Circle($part);
++  }
++  return new MultiCircle($circles);
++}
++
+   private function parseLineString($data_string) {
+     $data_string = $this->trimParens($data_string);
+ 
+@@ -161,7 +204,7 @@ private function parseGeometryCollection($data_string) {
+     $components = explode('|', trim($str));
+ 
+     foreach ($components as $component) {
+-      $geometries[] = $this->read($component);
++      $geometries[] = $this->read($component); 
+     }
+     return new GeometryCollection($geometries);
+   }
+@@ -233,6 +276,16 @@ public function write(Geometry $geometry) {
+   public function extractData($geometry) {
+     $parts = array();
+     switch ($geometry->geometryType()) {
++      case 'Circle':
++        foreach ($geometry->getComponents() as $component) {
++          if ($component instanceof Geometry) {
++            $parts[] = '('.$this->extractData($component).')';
++          }
++          else {
++            $parts[] = $component;
++          }
++        }
++        return(implode(', ', $parts));
+       case 'Point':
+         return $geometry->getX().' '.$geometry->getY();
+       case 'LineString':
+@@ -244,6 +297,7 @@ public function extractData($geometry) {
+       case 'MultiPoint':
+       case 'MultiLineString':
+       case 'MultiPolygon':
++      case 'MultiCircle':
+         foreach ($geometry->getComponents() as $component) {
+           $parts[] = '('.$this->extractData($component).')';
+         }

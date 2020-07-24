@@ -1,0 +1,314 @@
+diff --git a/vendor/phayes/geophp/lib/geometry/Circle.class.php b/vendor/phayes/geophp/lib/geometry/Circle.class.php
+new file mode 100644
+index 0000000..67f24e5
+--- /dev/null
++++ b/vendor/phayes/geophp/lib/geometry/Circle.class.php
+@@ -0,0 +1,109 @@
++<?php
++
++/**
++ * You know what a circle is, right? 
++ * 
++ */
++class Circle extends Geometry
++{
++  protected $geom_type = 'Circle';
++  public $components = array();
++
++  public function __construct($components = array()) {
++    if (!is_array($components)) {
++      throw new Exception("Component geometries must be passed as an array");
++    }
++    foreach ($components as $component) {
++        $this->components[] = $component;
++    }
++  }
++
++    public function isEmpty() {
++        if (!count($this->components)) {
++          return TRUE;
++        }
++        else {
++          foreach ($this->components as $component) {
++            if ($component instanceOf Geometry) {
++              if (!$component->isEmpty()) return FALSE;
++            }
++            else {
++              if (!isset($component)) return FALSE;
++            }
++          }
++          return TRUE;
++        }
++    }
++
++    public function getComponents() {
++        return $this->components;
++    }
++
++    public function getType() {
++        return $this->$geom_type;
++    }
++
++    public function getCenter() {
++      return $this->components[0];
++    }
++
++    public function centroid() {
++      $center = $this->getCenter();
++      return new Point($center[0], $center[1]);
++    }
++
++    public function getRadius() {
++      return $this->components[1];
++    }
++
++    public function asArray() {
++      $array = array();
++      foreach ($this->components as $component) {
++        $array[] = $component;
++      }
++      return $array;
++    }
++
++    public function getBBox() {
++
++      $center = $this->getCenter();
++      $radius = round($this->getRadius()/111139, 6);
++      $upper_left = [ $center[0] - $radius, $radius - $center[1] ];
++      $upper_right = [ $center[0] + $radius, $radius - $center[1] ];
++      $lower_right = [ $center[0] + $radius, 0 - $center[1] - $radius ];
++      $lower_left = [ $radius - $center[0], 0 - $center[1] - $radius ];
++
++      return array (
++      'maxy' => $upper_left[1],
++      'miny' => $lower_left[1],
++      'maxx' => $upper_right[0],
++      'minx' => $upper_left[0],
++      ); 
++    }
++
++    // Chilling for now
++    public function area()  {error_log('area'); return NULL; }
++    public function boundary()  {error_log('boundary'); return NULL; }
++    public function length() {error_log('length'); return NULL; }
++    public function y() {error_log('y'); return NULL; }
++    public function x() {error_log('x'); return NULL; }
++    public function numGeometries() {error_log('numgeometries'); return NULL; }
++    public function geometryN($n) {error_log('geometryn'); return NULL; }
++    public function startPoint() {error_log('startpoint'); return NULL; }
++    public function endPoint() {error_log('endpoint'); return NULL; }
++    public function isRing()    {error_log('isring'); return NULL; }          
++    public function isClosed()  {error_log('isclosed'); return NULL; }       
++    public function numPoints() {error_log('area'); return NULL; }
++    public function pointN($n)  {error_log('pointn'); return NULL; }
++    public function exteriorRing()  {error_log('exteriorring'); return NULL; }
++    public function numInteriorRings()  {error_log('numinteriorrings'); return NULL; }
++    public function interiorRingN($n)   {error_log('interiorringn'); return NULL; }
++    public function dimension() {error_log('dimension'); return NULL; }
++    public function equals($geom)   {error_log('equals'); return NULL; }
++    public function isSimple()  {error_log('issimple'); return NULL; }
++    public function getPoints() {error_log('getpoints'); return NULL; }
++    public function explode()   {error_log('explode'); return NULL; }
++    public function greatCircleLength() {error_log('greatcirclelength'); return NULL; }
++    public function haversineLength()   {error_log('haversinelength'); return NULL; }
++}
++
+diff --git a/vendor/phayes/geophp/lib/geometry/Collection.class.php b/vendor/phayes/geophp/lib/geometry/Collection.class.php
+index dfacf37..a97666c 100644
+--- a/vendor/phayes/geophp/lib/geometry/Collection.class.php
++++ b/vendor/phayes/geophp/lib/geometry/Collection.class.php
+@@ -40,24 +40,6 @@ public function getComponents() {
+     return $this->components;
+   }
+ 
+-  /*
+-   * Author : Adam Cherti
+-   *
+-   * inverts x and y coordinates
+-   * Useful for old data still using lng lat
+-   *
+-   * @return void
+-   *
+-   * */
+-  public function invertxy()
+-  {
+-	for($i=0;$i<count($this->components);$i++)
+-	{
+-		if( method_exists($this->components[$i], 'invertxy' ) )
+-			$this->components[$i]->invertxy();
+-	}
+-  }
+-
+   public function centroid() {
+     if ($this->isEmpty()) return NULL;
+ 
+diff --git a/vendor/phayes/geophp/lib/geometry/MultiCircle.class.php b/vendor/phayes/geophp/lib/geometry/MultiCircle.class.php
+new file mode 100644
+index 0000000..2711dda
+--- /dev/null
++++ b/vendor/phayes/geophp/lib/geometry/MultiCircle.class.php
+@@ -0,0 +1,123 @@
++<?php
++/**
++ * MultiCircle: A collection of Circles
++ */
++class MultiCircle extends Geometry
++{
++  protected $geom_type = 'MultiCircle';
++  public $components = array();
++
++  public function __construct($components = array()) {
++    if (!is_array($components)) {
++      throw new Exception("Component geometries must be passed as an array");
++    }
++    foreach ($components as $component) {
++      if ($component instanceof Geometry) {
++        $this->components[] = $component;
++      }
++      else {
++        throw new Exception("Cannot create a collection with non-geometries");
++      }
++    }
++  }
++
++  public function getComponents() {
++    return $this->components;
++  }
++
++  public function getType() {
++    return $this->$geom_type;
++}
++
++public function asArray() {
++    $array = array();
++    foreach ($this->components as $component) {
++      $array[] = $component;
++    }
++    return $array;
++}
++
++public function centroid() {
++    if ($this->isEmpty()) return NULL;
++
++    if ($this->geos()) {
++      $geos_centroid = $this->geos()->centroid();
++      if ($geos_centroid->typeName() == 'Point') {
++        return geoPHP::geosToGeometry($this->geos()->centroid());
++      }
++    }
++
++    // As a rough estimate, we say that the centroid of a colletion is the centroid of it's envelope
++    // @@TODO: Make this the centroid of the convexHull
++    // Note: Outside of polygons, geometryCollections and the trivial case of points, there is no standard on what a "centroid" is
++    $centroid = $this->envelope()->centroid();
++
++    return $centroid;
++}
++
++public function getBBox() {
++
++    foreach ($this->components as $component) {
++        $circle = new Circle($component->components);
++        $center = $circle->getCenter();
++        $radius = round($circle->getRadius()/111139, 6);
++        
++        $upper_left = [ $center[0] - $radius, $radius - $center[1] ];
++        $x[] = $upper_left[0];
++        $y[] = $upper_left[1];
++
++        $upper_right = [ $center[0] + $radius, $radius - $center[1] ];
++        $x[] = $upper_right[0];
++        $y[] = $upper_right[1];
++
++        $lower_right = [ $center[0] + $radius, 0 - $center[1] - $radius ];
++        $x[] = $lower_right[0];
++        $y[] = $lower_right[1];
++
++        $lower_left = [ $radius - $center[0], 0 - $center[1] - $radius ];
++        $x[] = $lower_left[0];
++        $y[] = $lower_left[1];
++
++    }
++
++    $maxx = max($x);
++    $minx = min($x);
++    $maxy = max($y);
++    $miny = min($y);
++
++    return array (
++    'maxy' => $maxy,
++    'miny' => $miny,
++    'maxx' => $maxx,
++    'minx' => $minx,
++    ); 
++}
++
++public function area() { return NULL; }
++public function boundary() { return NULL; }
++public function length() { return NULL; }
++public function y() { return NULL; }
++public function x() { return NULL; }
++public function numGeometries() { return NULL; }
++public function geometryN($n) { return NULL; }
++public function startPoint() { return NULL; }
++public function endPoint() { return NULL; }
++public function isRing() { return NULL; }          
++public function isClosed() { return NULL; }      
++public function numPoints() { return NULL; }
++public function pointN($n) { return NULL; }
++public function exteriorRing() { return NULL; }
++public function numInteriorRings() { return NULL; }
++public function interiorRingN($n) { return NULL; }
++public function dimension() { return NULL; }
++public function equals($geom) { return NULL; }
++public function isEmpty() { return NULL; }
++public function isSimple() { return NULL; }
++
++  // Abtract: Non-Standard
++  // ---------------------
++public function getPoints() { return NULL; }
++public function explode(){ return NULL; }
++public function greatCircleLength() { return NULL; }
++public function haversineLength() { return NULL; }
++}
+\ No newline at end of file
+diff --git a/vendor/phayes/geophp/lib/geometry/Point.class.php b/vendor/phayes/geophp/lib/geometry/Point.class.php
+index c76af92..d6556cb 100644
+--- a/vendor/phayes/geophp/lib/geometry/Point.class.php
++++ b/vendor/phayes/geophp/lib/geometry/Point.class.php
+@@ -83,21 +83,6 @@ public function z() {
+     else return NULL;
+   }
+ 
+-  /**
+-   * Author : Adam Cherti
+-   * inverts x and y coordinates
+-   * Useful with old applications still using lng lat
+-   *
+-   * @return void
+-   * */
+-  public function invertxy()
+-  {
+-	$x=$this->coords[0];
+-	$this->coords[0]=$this->coords[1];
+-	$this->coords[1]=$x;
+-  }
+-
+-
+   // A point's centroid is itself
+   public function centroid() {
+     return $this;
+@@ -163,12 +148,7 @@ public function equals($geometry) {
+       return FALSE;
+     }
+     if (!$this->isEmpty() && !$geometry->isEmpty()) {
+-      /**
+-       * @see: http://php.net/manual/en/function.bccomp.php
+-       * @see: http://php.net/manual/en/language.types.float.php
+-       * @see: http://tubalmartin.github.io/spherical-geometry-php/#LatLng
+-       */
+-      return (abs($this->x() - $geometry->x()) <= 1.0E-9 && abs($this->y() - $geometry->y()) <= 1.0E-9);
++      return ($this->x() == $geometry->x() && $this->y() == $geometry->y());
+     }
+     else if ($this->isEmpty() && $geometry->isEmpty()) {
+       return TRUE;

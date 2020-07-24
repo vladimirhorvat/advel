@@ -1,0 +1,467 @@
+<?php
+
+use Drupal\node\Entity\Node;
+
+function advel_core_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id) {
+    
+    if ($form_id === 'user_register_form') {
+        $form['company_profiles']['widget']['0']['entity']['field_main_geolocation']['#attributes']['class'][] = 'hidden';
+        $form['company_profiles']['widget']['0']['entity']['field_geolocation']['#attributes']['class'][] = 'hidden';
+    }
+}
+
+function advel_core_preprocess_field(&$variables) {
+    if ($variables['element']['#field_name'] === 'field_ad_locations') {
+        $node = \Drupal::routeMatch()->getParameter('node');
+        $nid = $node->id();
+        $conn= \Drupal::database();
+        $query = $conn->select('node__field_ad_locations', 'leaf');
+        $query->fields('leaf', array('field_ad_locations_value'));
+        $query->condition('entity_id', $nid);
+        $result = $query->execute()->fetchField();
+        $variables['geometry_collection'] = $result;
+        $parsed_polygon = get_string_between($result, 'POLYGON ((', ')' );
+        $parsed_point = get_string_between($result, 'POINT (', ')' );
+        $variables['parsed_polygon'] = $parsed_polygon;
+        $variables['parsed_point'] = $parsed_point;
+
+        $variables['polygon_points'] = figure_to_coords($parsed_polygon, 'POLYGON');
+        $variables['point_points'] = figure_to_coords($parsed_point, 'POINT');
+
+        $polygon_array = figure_to_coords($parsed_polygon, 'POLYGON');
+        $point_array = figure_to_coords($parsed_point, 'POINT');
+
+        //$variables['intersect'] = $intersecting;
+
+        if (strpos($result, 'GEOMETRYCOLLECTION') !== false) {
+            $collection = "GEOMETRYCOLLECTION";
+        } 
+        else if (strpos($result, 'MULTILINESTRING') !== false) {
+            $collection = "MULTILINESTRING";
+        }
+        else if (strpos($result, 'MULTIPOLYGON') !== false) {
+            $collection = "MULTIPOLYGON";
+        }
+
+        switch ($collection) {
+            case 'GEOMETRYCOLLECTION':
+
+                $multipolygon_array = explode('POLYGON ((', $result);
+                $multipolygon_array_clean = array();
+                foreach ($multipolygon_array as &$poly) {
+                    if (strpos($poly, 'GEOMETRYCOLLECTION') === false) {
+                        $clean = explode(')),', $poly);
+                        $poly = $clean[0];
+                        $multipolygon_array_clean[] = $poly;;
+                    }
+                }
+                $multipoint_array = explode('POINT (', $result);
+                $multipoint_array_clean = array();
+                foreach ($multipoint_array as &$point) {
+                    if (strpos($point, 'GEOMETRYCOLLECTION') === false) {
+                        $clean = explode('),', $point);
+                        $clean = str_replace('))', '', $clean[0]);
+                        $multipoint_array_clean[] = $clean;
+                    }
+                }
+                $polygons = array();
+                $points = array();
+                $point_num = 0;
+                $poly_num = 0;
+                foreach ($multipolygon_array_clean as $polygon) {
+                    $polygons['polygon-' . $poly_num] = figure_to_coords($polygon, "POLYGON");
+                    $poly_num++;
+                }
+                foreach ($multipoint_array_clean as $point) {
+                    $points['point-' . $point_num] = figure_to_coords($point, "POINT");
+                    $point_num++;
+                }
+                $point_num = 0;
+                $poly_num = 0;
+                $intersecting_data = array();
+                foreach ($polygons as $polygon) {
+                    $point_num = 0;
+                    foreach ($points as $point) {
+                        $intersecting = point_inside_polygon($point, $polygon);
+                        if ($intersecting) {
+                            $intersecting_data[] = 'Point ' . $point_num . ' intersects with Polygon ' . $poly_num;
+                        } 
+                        else {
+                            $intersecting_data[] = 'Point ' . $point_num . ' does not intersect with Polygon ' . $poly_num;
+                        }
+                        $point_num++;
+                    }
+                    $poly_num++;
+                }
+                $polygon_intersections = polygon_intersection($polygons);
+                if (isset($intersecting_data) && isset($polygon_intersections)) {
+                    $intersecting_data = array_merge($intersecting_data, $polygon_intersections);
+                }
+                $result_raw = array_merge($polygons, $points);
+                $result_json = json_encode($result_raw);
+                break;
+
+            case "MULTIPOLYGON":
+
+                $multipolygon_array = explode('((', $result);
+                $multipolygon_array_clean = array();
+                foreach ($multipolygon_array as &$poly) {
+                    if (strpos($poly, 'MULTIPOLYGON') === false) {
+                        $clean = explode(')),', $poly);
+                        $clean = str_replace('(', '', $clean[0]);
+                        $clean = str_replace(')', '', $clean);
+                        $multipolygon_array_clean[] = $clean;
+                    }
+                }
+                $poly_num = 0;
+                foreach ($multipolygon_array_clean as $polygon) {
+                    $polygons['polygon-' . $poly_num] = figure_to_coords($polygon, "POLYGON");
+                    $poly_num++;
+                }
+                $intersecting_data = polygon_intersection($polygons);
+                $result_json = json_encode($polygons);
+                break;
+            }
+            $variables['multiple_figures_intersect'] = $intersecting_data;
+            $variables['result_json'] = $result_json;
+    }
+ }
+
+ /**
+ * Implements hook_entity_presave().
+ */
+function advel_core_node_insert(Node $entity) {
+    if ($entity->getType() == 'advertisement') {
+        $ad_node = Node::load($entity->id());
+        $result_raw = leaflet_to_figure_array($ad_node->id());
+        foreach ($result_raw as $result) {
+            $node = Node::create(['type' => 'ad_area', 'title' => 'placeholder']);
+            foreach ($result as $point) {
+                $node->field_point[] = implode(' ', $point);
+            }
+            $node->set('field_advertisement_reference', $entity->id());
+            $node->save();
+            $nid = $node->id();
+            $node = Node::load($nid);
+            $node->set('title', 'figure-' . $nid);
+            $node->save();
+            $ad_node->field_ad_area_reference[] = ['target_id' => $nid];
+        }
+        $ad_node->save();
+    }
+}
+
+function advel_core_node_presave(Drupal\Core\Entity\EntityInterface $entity) {
+    if ($entity->getType() == 'advertisement' && !$entity->isNew()) {
+        $i = 0;
+        foreach ($entity->field_ad_area_reference->referencedEntities() as $figure) {
+            $area_node = Node::load($figure->id()); 
+            if (isset($area_node)) {
+                $area_node->delete();
+            }
+            if (isset($entity->field_ad_area_reference[$i])) {
+                unset($entity->field_ad_area_reference[$i]);
+            }
+            $i++; 
+        }
+        $result_raw = leaflet_to_figure_array($entity->get('field_ad_locations')->value);
+        foreach ($result_raw as $key => $result) {
+            $node = Node::create(['type' => 'ad_area', 'title' => 'placeholder']);
+            if (strpos($key, 'polygon') !== false) {
+                foreach ($result as $point) {
+                    $node->field_point[] = implode(' ', $point);
+                }
+            }
+            else {
+                $node->field_point[] = implode(' ', $result);
+            }
+            $node->set('field_advertisement_reference', $entity->id());
+            $node->save();
+            $nid = $node->id();
+            $node = Node::load($nid);
+            $node->set('title', 'figure-' . $nid);
+            $node->save();
+            $entity->field_ad_area_reference[] = ['target_id' => $nid];
+        }
+    }
+}
+
+function figure_to_coords ($parsed_polygon, $figure_type) {
+    if ($figure_type == "POINT") {
+        $points = explode(' ', $parsed_polygon);
+        foreach ($points as &$coord) {
+            $coord = floatval($coord);
+        }
+    }
+    else if ($figure_type == "POLYGON") {
+        $points = explode(', ', $parsed_polygon);
+        foreach ($points as &$point) {
+            $point_coords = explode(' ', $point);
+            foreach ($point_coords as &$coord) {
+                $coord = floatval($coord);
+            }
+            $point = $point_coords;
+        }
+    }
+    return $points;
+}
+
+function get_string_between($string, $start, $end){
+    $string = ' ' . $string;
+    $ini = strpos($string, $start);
+    if ($ini == 0) return '';
+    $ini += strlen($start);
+    $len = strpos($string, $end, $ini) - $ini;
+    return substr($string, $ini, $len);
+}
+
+function point_inside_polygon ($point, $vs) {
+        // ray-casting algorithm based on
+        // http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
+        $x = $point[0]; 
+        $y = $point[1];
+
+        $point1 = array();
+        $point2 = array();
+        $line = array();
+        
+        $inside = false;
+        for ($i = 0, $j = count($vs) - 1; $i < count($vs); $j = $i++) {
+            $xi = $vs[$i]['0']; 
+            $yi = $vs[$i]['1'];
+            $xj = $vs[$j]['0']; 
+            $yj = $vs[$j]['1'];
+            
+            $intersect = ((($yi > $y) != ($yj > $y)) && ($x < ($xj - $xi) * ($y - $yi) / ($yj - $yi) + $xi)) || ($xi == $x && $yi == $y);
+            if ($intersect) $inside = !$inside;
+        }
+
+        for ($i = 0, $j = count($vs) - 1; $i < count($vs); $j = $i++) {
+            $xi = $vs[$i]['0']; 
+            $yi = $vs[$i]['1'];
+            $xj = $vs[$j]['0']; 
+            $yj = $vs[$j]['1'];
+
+            $point1[] = $xi;
+            $point1[] = $yi;
+            $line[] = $point1; 
+            $point2[] = $xj;
+            $point2[] = $yj;
+            $line[] = $point2; 
+            
+            $on_line = point_on_line($point, $line);
+            unset($point1);
+            unset($point2);
+            unset($line);
+            
+            if ($on_line) $inside = true;
+        }
+        
+        return $inside;
+}
+
+function point_on_line ($point, $vs) {
+
+    $x = $point[0]; 
+    $y = $point[1];  
+
+    $point1x = $vs[0][0];;
+    $point1y = $vs[0][1];
+    $point2x = $vs[1][0];
+    $point2y = $vs[1][1];
+
+    $dxc = $x - $point1x;
+    $dyc = $y - $point1y;
+
+    $dxl = $point2x - $point1x;
+    $dyl = $point2y - $point1y;
+
+    $cross = $dxc * $dyl - $dyc * $dxl;
+    if ($cross != 0){
+        return false;
+    }
+
+    if (abs($dxl) >= abs($dyl))
+    return $dxl > 0 ? 
+        $point1x <= $x && $x <= $point2x :
+        $point2x <= $x && $x <= $point1x;
+    else
+    return $dyl > 0 ? 
+        $point1y <= $y && $y <= $point2y :
+        $point2y <= $y && $y <= $point1y;
+
+}
+
+function polygon_intersection ($polygons) {
+    for ($i = 0; $i < count($polygons); $i++) {
+        $current_polygon_points = $polygons['polygon-' . $i];
+        for ($j = 0; $j < count($polygons); $j++) {
+            if ($i != $j) {
+                if (!isset($intersecting_data[$i . $j])) {
+                    $intersecting_data[$i . $j] = 'Polygon ' . $i . ' does NOT intersect with Polygon ' . $j;
+                }
+                foreach ($current_polygon_points as $point) {
+                    $intersecting = point_inside_polygon ($point, $polygons['polygon-' . $j]);
+                    if ($intersecting) {
+                        $intersecting_data[$i . $j] = 'Polygon ' . $i . '  intersects with Polygon ' . $j;
+                        $intersecting_data[$j . $i] = 'Polygon ' . $j . '  intersects with Polygon ' . $i;
+                    }
+                }
+            }
+        }  
+    }
+    return $intersecting_data;
+}
+function leaflet_to_figure_array ($data = null, $nid = null) {
+    if (is_null($data)) {
+        $conn= \Drupal::database();
+        $query = $conn->select('node__field_ad_locations', 'leaf');
+        $query->fields('leaf', array('field_ad_locations_value'));
+        $query->condition('entity_id', $nid);
+        $result = $query->execute()->fetchField();
+        $result_raw = result_to_array($result);
+    }
+    else {
+        $result = $data;
+        $result_raw = result_to_array($result);
+    }
+    return $result_raw;
+}
+
+function result_to_array($result) {
+    if (strpos($result, 'GEOMETRYCOLLECTION') !== false) {
+        $collection = "GEOMETRYCOLLECTION";
+    } 
+    else if (strpos($result, 'MULTIPOINT') !== false) {
+        $collection = "MULTIPOINT";
+    }
+    else if (strpos($result, 'MULTIPOLYGON') !== false) {
+        $collection = "MULTIPOLYGON";
+    }
+    else if (strpos($result, 'POLYGON') !== false && strpos($result, 'GEOMETRYCOLLECTION') === false) {
+        $collection = "POLYGON";
+    }
+    else if (strpos($result, 'POINT') !== false && strpos($result, 'GEOMETRYCOLLECTION') === false) {
+        $collection = "POINT";
+    }
+
+    switch ($collection) {
+        case 'GEOMETRYCOLLECTION':
+
+            $multipolygon_array = explode('POLYGON ((', $result);
+            $multipolygon_array_clean = array();
+            foreach ($multipolygon_array as &$poly) {
+                if (strpos($poly, 'GEOMETRYCOLLECTION') === false) {
+                    $clean = explode(')),', $poly);
+                    $poly = $clean[0];
+                    $multipolygon_array_clean[] = $poly;;
+                }
+            }
+            $multipoint_array = explode('POINT (', $result);
+            $multipoint_array_clean = array();
+            foreach ($multipoint_array as &$point) {
+                if (strpos($point, 'GEOMETRYCOLLECTION') === false) {
+                    $clean = explode('),', $point);
+                    $clean = str_replace('))', '', $clean[0]);
+                    $multipoint_array_clean[] = $clean;
+                }
+            }
+            $polygons = array();
+            $points = array();
+            $point_num = 0;
+            $poly_num = 0;
+            foreach ($multipolygon_array_clean as $polygon) {
+                $polygons['polygon-' . $poly_num] = figure_to_coords($polygon, "POLYGON");
+                $poly_num++;
+            }
+            foreach ($multipoint_array_clean as $point) {
+                $points['point-' . $point_num] = figure_to_coords($point, "POINT");
+                $point_num++;
+            }
+            $result_raw = array_merge($polygons, $points);
+            break;
+
+        case "MULTIPOLYGON":
+
+            $multipolygon_array = explode('((', $result);
+            $multipolygon_array_clean = array();
+            foreach ($multipolygon_array as &$poly) {
+                if (strpos($poly, 'MULTIPOLYGON') === false) {
+                    $clean = explode(')),', $poly);
+                    $clean = str_replace('(', '', $clean[0]);
+                    $clean = str_replace(')', '', $clean);
+                    $multipolygon_array_clean[] = $clean;
+                }
+            }
+            $polygons = array();
+            $poly_num = 0;
+            foreach ($multipolygon_array_clean as $polygon) {
+                $polygons['polygon-' . $poly_num] = figure_to_coords($polygon, "POLYGON");
+                $poly_num++;
+            };
+            $result_raw = $polygons;
+            break;
+
+        case 'POLYGON':
+            $multipolygon_array = explode('((', $result);
+            $multipolygon_array_clean = array();
+            foreach ($multipolygon_array as &$poly) {
+                if (strpos($poly, 'POLYGON') === false) {
+                    $clean = explode(')),', $poly);
+                    $clean = str_replace('(', '', $clean[0]);
+                    $clean = str_replace(')', '', $clean);
+                    $multipolygon_array_clean[] = $clean;
+                }
+            }
+            $polygons = array();
+            $poly_num = 0;
+            foreach ($multipolygon_array_clean as $polygon) {
+                $polygons['polygon-' . $poly_num] = figure_to_coords($polygon, "POLYGON");
+                $poly_num++;
+            };
+            $result_raw = $polygons;
+            break;
+
+        case 'MULTIPOINT':
+            $multipoint_array = explode('(', $result);
+            $multipoint_array_clean = array();
+            foreach ($multipoint_array as &$point) {
+                if (strpos($point, 'MULTIPOINT') === false && !empty($point)) {
+                    $clean = explode('),', $point);
+                    $clean = str_replace('(', '', $clean[0]);
+                    $clean = str_replace(')', '', $clean);
+                    $multipoint_array_clean[] = $clean;
+                }
+            }
+            $points = array();
+            $point_num = 0;
+            foreach ($multipoint_array_clean as $point) {
+                $points['point-' . $point_num] = figure_to_coords($point, "POINT");
+                $point_num++;
+            };
+            $result_raw = $points;
+            break;
+
+        case 'POINT':
+            $multipoint_array = explode('((', $result);
+            $multipoint_array_clean = array();
+            foreach ($multipoint_array as &$point) {
+                if (strpos($point, 'POINT') === false) {
+                    $clean = explode('),', $point);
+                    $clean = str_replace('(', '', $clean[0]);
+                    $clean = str_replace(')', '', $clean);
+                    $multipoint_array_clean[] = $clean;
+                }
+            }
+            $points = array();
+            $point_num = 0;
+            foreach ($multipoint_array_clean as $point) {
+                $points['point-' . $point_num] = figure_to_coords($point, "POINT");
+                $point_num++;
+            };
+            $result_raw = $points;
+            break;
+        }
+
+        return $result_raw;
+}

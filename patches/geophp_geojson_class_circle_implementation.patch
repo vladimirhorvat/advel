@@ -1,0 +1,123 @@
+diff --git a/vendor/phayes/geophp/lib/adapters/GeoJSON.class.php b/vendor/phayes/geophp/lib/adapters/GeoJSON.class.php
+index fa0a0e2..eedb222 100644
+--- a/vendor/phayes/geophp/lib/adapters/GeoJSON.class.php
++++ b/vendor/phayes/geophp/lib/adapters/GeoJSON.class.php
+@@ -34,7 +34,6 @@ public function read($input) {
+       }
+       return geoPHP::geometryReduce($geoms);
+     }
+-
+     // Check to see if it's a Feature
+     if ($input->type == 'Feature') {
+       return $this->read($input->geometry);
+@@ -50,8 +49,16 @@ private function objToGeom($obj) {
+     if ($type == 'GeometryCollection') {
+       return $this->objToGeometryCollection($obj);
+     }
++    if ($type == 'Circle') {
++      $obj->coordinates[] = $obj->radius;
++    }
+     $method = 'arrayTo' . $type;
+-    return $this->$method($obj->coordinates);
++    if (isset($obj->coordinates)) {
++      return $this->$method($obj->coordinates);
++    }
++    else {
++      return $this->$method($obj->components);
++    }
+   }
+ 
+   private function arrayToPoint($array) {
+@@ -103,6 +110,31 @@ private function arrayToMultiPolygon($array) {
+     return new MultiPolygon($polys);
+   }
+ 
++  private function arrayToCircle($array) {
++    if (is_array($array)) {
++      $center = [$array[0], $array[1]];
++      $center = $this->arrayToPoint($center);
++      $radius = $array[2];
++      $comp_array = [$center, $radius];
++      return new Circle($comp_array);
++    }
++    else {
++      $center = [$array->coordinates[0], $array->coordinates[1]];
++      $center = $this->arrayToPoint($center);
++      $radius = $array->radius;
++      $comp_array = [$center, $radius];
++      return new Circle($comp_array);
++    }
++  }
++
++  private function arrayToMultiCircle($array) {
++    $circles = array();
++    foreach ($array as $comp_array) {
++      $circles[] = $this->arrayToCircle($comp_array);
++    }
++    return new MultiCircle($circles);
++  }
++
+   private function objToGeometryCollection($obj) {
+     $geoms = array();
+     if (empty($obj->geometries)) {
+@@ -135,20 +167,52 @@ public function getArray($geometry) {
+     if ($geometry->getGeomType() == 'GeometryCollection') {
+       $component_array = array();
+       foreach ($geometry->components as $component) {
+-        $component_array[] = array(
+-          'type' => $component->geometryType(),
+-          'coordinates' => $component->asArray(),
+-        );
++        if ($component->geometryType() !== 'Circle') {
++          $component_array[] = array(
++            'type' => $component->geometryType(),
++            'coordinates' => $component->asArray(),
++          );
++        }
++        else {
++          $component_array[] = array(
++            'type' => $component->geometryType(),
++            'coordinates' => $component->getCenter(),
++            'radius' => $component->getRadius(),
++          );
++        }
+       }
+       return array(
+         'type'=> 'GeometryCollection',
+         'geometries'=> $component_array,
+       );
+     }
+-    else return array(
+-      'type'=> $geometry->getGeomType(),
+-      'coordinates'=> $geometry->asArray(),
+-    );
++    else if ($geometry->getGeomType() != 'Circle' && $geometry->getGeomType() != 'MultiCircle') { 
++      return array(
++        'type'=> $geometry->getGeomType(),
++        'coordinates'=> $geometry->asArray(),
++      );
++    }
++    else if ($geometry->getGeomType() == 'Circle') {
++      return array(
++        'type'=> $geometry->getGeomType(),
++        'coordinates'=> $geometry->getCenter(),
++        'radius' => $geometry->getRadius(),
++      );
++    }
++    else if ($geometry->getGeomType() == 'MultiCircle') {
++      $component_array = array();
++      foreach ($geometry->components as $component) {
++          $component_array[] = array(
++            'type' => $component->geometryType(),
++            'coordinates' => $component->getCenter(),
++            'radius' => $component->getRadius(),
++          );
++      }
++      return array(
++        'type'=> 'MultiCircle',
++        'components'=> $component_array,
++      );
++    }
+   }
+ }
+ 

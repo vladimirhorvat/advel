@@ -1,0 +1,13 @@
+diff --git a/web/modules/contrib/leaflet/leaflet.libraries.yml b/web/modules/contrib/leaflet/leaflet.libraries.yml
+index 5b8a359..fcfc47d 100644
+--- a/web/modules/contrib/leaflet/leaflet.libraries.yml
++++ b/web/modules/contrib/leaflet/leaflet.libraries.yml
+@@ -12,7 +12,7 @@ leaflet:
+     url: https://github.com/Leaflet/Leaflet/blob/v1.4.0/LICENSE
+     gpl-compatible: true
+   js:
+-    js/leaflet/dist/leaflet.js: {}
++    js/leaflet/dist/leaflet-src.js: {}
+   css:
+     component:
+       js/leaflet/dist/leaflet.css: {}

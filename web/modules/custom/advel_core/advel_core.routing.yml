@@ -1,0 +1,15 @@
+advel_core.update:
+  path: '/location/update/{id}'
+  defaults:
+    _controller: 'Drupal\advel_core\Controller\Location::update'
+  requirements:
+    _permission: 'access content'
+    
+advel_core.tracking_controller_hello:
+  path: "/data/{param}"
+  defaults:
+    _controller: '\Drupal\advel_core\Controller\TrackingController::data'
+    _title: "track"
+    param: 0
+  requirements:
+    _permission: "access content"

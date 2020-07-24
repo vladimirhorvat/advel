@@ -1,0 +1,218 @@
+diff --git a/web/modules/contrib/leaflet/js/leaflet/dist/leaflet-src.js b/web/modules/contrib/leaflet/js/leaflet/dist/leaflet-src.js
+index f7adaf0..59e10f5 100644
+--- a/web/modules/contrib/leaflet/js/leaflet/dist/leaflet-src.js
++++ b/web/modules/contrib/leaflet/js/leaflet/dist/leaflet-src.js
+@@ -2,7 +2,6 @@
+  * Leaflet 1.4.0+Detached: 3337f36d2a2d2b33946779057619b31f674ff5dc.3337f36, a JS library for interactive maps. http://leafletjs.com
+  * (c) 2010-2018 Vladimir Agafonkin, (c) 2010-2011 CloudMade
+  */
+-
+ (function (global, factory) {
+ 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+ 	typeof define === 'function' && define.amd ? define(['exports'], factory) :
+@@ -7979,7 +7978,6 @@ function circleMarker(latlng, options) {
+  * L.circle([50.5, 30.5], {radius: 200}).addTo(map);
+  * ```
+  */
+-
+ var Circle = CircleMarker.extend({
+ 
+ 	initialize: function (latlng, options, legacyOptions) {
+@@ -7988,7 +7986,15 @@ var Circle = CircleMarker.extend({
+ 			options = extend({}, legacyOptions, {radius: options});
+ 		}
+ 		setOptions(this, options);
+-		this._latlng = toLatLng(latlng);
++		if (typeof latlng[0] !== 'undefined' && typeof latlng[1] !== 'undefined') {
++			this._latlng = toLatLng(latlng[0], latlng[1]);
++		}
++		else if (typeof latlng.lat !== 'undefined' && typeof latlng.lng !== 'undefined') {
++			this._latlng = toLatLng(latlng.lat, latlng.lng);
++		}
++		else {
++			this._latlng = toLatLng(latlng[0].lat, latlng[0].lng);
++		}
+ 
+ 		if (isNaN(this.options.radius)) { throw new Error('Circle radius cannot be NaN'); }
+ 
+@@ -8035,18 +8041,19 @@ var Circle = CircleMarker.extend({
+ 			    latR = (this._mRadius / Earth.R) / d,
+ 			    top = map.project([lat + latR, lng]),
+ 			    bottom = map.project([lat - latR, lng]),
+-			    p = top.add(bottom).divideBy(2),
++				p = top.add(bottom).divideBy(2),
+ 			    lat2 = map.unproject(p).lat,
+ 			    lngR = Math.acos((Math.cos(latR * d) - Math.sin(lat * d) * Math.sin(lat2 * d)) /
+-			            (Math.cos(lat * d) * Math.cos(lat2 * d))) / d;
++						(Math.cos(lat * d) * Math.cos(lat2 * d))) / d;
++			
+ 
+ 			if (isNaN(lngR) || lngR === 0) {
+ 				lngR = latR / Math.cos(Math.PI / 180 * lat); // Fallback for edge case, #2425
+ 			}
+-
+ 			this._point = p.subtract(map.getPixelOrigin());
+ 			this._radius = isNaN(lngR) ? 0 : p.x - map.project([lat2, lng - lngR]).x;
+-			this._radiusY = p.y - top.y;
++			this._radiusY = this._radius;
++
+ 
+ 		} else {
+ 			var latlng2 = crs.unproject(crs.project(this._latlng).subtract([this._mRadius, 0]));
+@@ -8669,13 +8676,11 @@ var GeoJSON = FeatureGroup.extend({
+ 		var options = this.options;
+ 
+ 		if (options.filter && !options.filter(geojson)) { return this; }
+-
+ 		var layer = geometryToLayer(geojson, options);
+ 		if (!layer) {
+ 			return this;
+ 		}
+ 		layer.feature = asFeature(geojson);
+-
+ 		layer.defaultOptions = layer.options;
+ 		this.resetStyle(layer);
+ 
+@@ -8722,12 +8727,12 @@ var GeoJSON = FeatureGroup.extend({
+ // functions if provided as options.
+ function geometryToLayer(geojson, options) {
+ 
+-	var geometry = geojson.type === 'Feature' ? geojson.geometry : geojson,
+-	    coords = geometry ? geometry.coordinates : null,
+-	    layers = [],
+-	    pointToLayer = options && options.pointToLayer,
+-	    _coordsToLatLng = options && options.coordsToLatLng || coordsToLatLng,
+-	    latlng, latlngs, i, len;
++	var geometry = geojson.type === 'Feature' ? geojson.geometry : geojson;
++	var coords = geometry ? geometry.coordinates : null;
++	var layers = [];
++	var pointToLayer = options && options.pointToLayer;
++	var _coordsToLatLng = options && options.coordsToLatLng || coordsToLatLng;
++	var latlng, latlngs, i, len;
+ 
+ 	if (!coords && !geometry) {
+ 		return null;
+@@ -8755,6 +8760,29 @@ function geometryToLayer(geojson, options) {
+ 		latlngs = coordsToLatLngs(coords, geometry.type === 'Polygon' ? 1 : 2, _coordsToLatLng);
+ 		return new Polygon(latlngs, options);
+ 
++	case 'Circle':
++		latlng = coordsToLatLngCircle(coords);
++		if (typeof geojson.geometry === 'undefined') {
++			var geojson = {
++				geometry: geojson,
++			};
++		}
++		var circle = new L.Circle(latlng, geojson.geometry.radius);
++		return circle;
++
++	case 'MultiCircle':
++		for (i = 0, len = geometry.components.length; i < len; i++) {
++			var layer = geometryToLayer({
++				geometry: geometry.components[i],
++				type: 'Feature',
++				properties: geojson.properties
++			}, options);
++			if (layer) {
++				layers.push(layer);
++			}
++		}
++		return new FeatureGroup(layers);
++		
+ 	case 'GeometryCollection':
+ 		for (i = 0, len = geometry.geometries.length; i < len; i++) {
+ 			var layer = geometryToLayer({
+@@ -8762,7 +8790,6 @@ function geometryToLayer(geojson, options) {
+ 				type: 'Feature',
+ 				properties: geojson.properties
+ 			}, options);
+-
+ 			if (layer) {
+ 				layers.push(layer);
+ 			}
+@@ -8781,6 +8808,10 @@ function coordsToLatLng(coords) {
+ 	return new LatLng(coords[1], coords[0], coords[2]);
+ }
+ 
++function coordsToLatLngCircle(coords) {
++	return new LatLng(coords[0], coords[1], coords[2]);
++}
++
+ // @function coordsToLatLngs(coords: Array, levelsDeep?: Number, coordsToLatLng?: Function): Array
+ // Creates a multidimensional array of `LatLng`s from a GeoJSON coordinates array.
+ // `levelsDeep` specifies the nesting level (0 is for an array of points, 1 for an array of arrays of points, etc., 0 by default).
+@@ -8808,6 +8839,13 @@ function latLngToCoords(latlng, precision) {
+ 		[formatNum(latlng.lng, precision), formatNum(latlng.lat, precision)];
+ }
+ 
++function latLngToCoordsCircle(latlng, precision) {
++	precision = typeof precision === 'number' ? precision : 6;
++	return latlng.alt !== undefined ?
++		[formatNum(latlng.lat, precision), formatNum(latlng.lng, precision), formatNum(latlng.alt, precision)] :
++		[formatNum(latlng.lat, precision), formatNum(latlng.lng, precision)];
++}
++
+ // @function latLngsToCoords(latlngs: Array, levelsDeep?: Number, closed?: Boolean): Array
+ // Reverse of [`coordsToLatLngs`](#geojson-coordstolatlngs)
+ // `closed` determines whether the first point should be appended to the end of the array to close the feature, only used when `levelsDeep` is 0. False by default.
+@@ -8839,7 +8877,6 @@ function asFeature(geojson) {
+ 	if (geojson.type === 'Feature' || geojson.type === 'FeatureCollection') {
+ 		return geojson;
+ 	}
+-
+ 	return {
+ 		type: 'Feature',
+ 		properties: {},
+@@ -8851,7 +8888,16 @@ var PointToGeoJSON = {
+ 	toGeoJSON: function (precision) {
+ 		return getFeature(this, {
+ 			type: 'Point',
+-			coordinates: latLngToCoords(this.getLatLng(), precision)
++			coordinates: latLngToCoords(this.getLatLng(), precision),
++		});
++	}
++};
++
++var CircleToGeoJSON = {
++	toGeoJSON: function (precision) {
++		return getFeature(this, {
++			type: 'Circle',
++			coordinates: latLngToCoordsCircle(this.getLatLng(), precision),
+ 		});
+ 	}
+ };
+@@ -8864,7 +8910,7 @@ Marker.include(PointToGeoJSON);
+ // @namespace CircleMarker
+ // @method toGeoJSON(): Object
+ // Returns a [`GeoJSON`](http://en.wikipedia.org/wiki/GeoJSON) representation of the circle marker (as a GeoJSON `Point` Feature).
+-Circle.include(PointToGeoJSON);
++Circle.include(CircleToGeoJSON);
+ CircleMarker.include(PointToGeoJSON);
+ 
+ 
+@@ -8926,7 +8972,6 @@ LayerGroup.include({
+ 	toGeoJSON: function (precision) {
+ 
+ 		var type = this.feature && this.feature.geometry && this.feature.geometry.type;
+-
+ 		if (type === 'MultiPoint') {
+ 			return this.toMultiPoint(precision);
+ 		}
+@@ -8937,6 +8982,9 @@ LayerGroup.include({
+ 		this.eachLayer(function (layer) {
+ 			if (layer.toGeoJSON) {
+ 				var json = layer.toGeoJSON(precision);
++				if (typeof layer._mRadius !== 'undefined') {
++					json.geometry.radius = layer._mRadius;
++				}
+ 				if (isGeometryCollection) {
+ 					jsons.push(json.geometry);
+ 				} else {
+@@ -8950,7 +8998,6 @@ LayerGroup.include({
+ 				}
+ 			}
+ 		});
+-
+ 		if (isGeometryCollection) {
+ 			return getFeature(this, {
+ 				geometries: jsons,
